@@ -58,19 +58,7 @@ jobs:
       - name: Deploy
         uses: s0/git-publish-subdir-action@develop
         env:
-          REPO: self
-          BRANCH: namadillodeploy
+          REPO: git@github.com:shield-crypto/namadillo-build.git
+          BRANCH: main
           FOLDER: "./apps/namadillo/dist"
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        
-      - name: Deploy to Netlify
-        uses: nwtgck/actions-netlify@v1.2.3
-        with:
-          publish-dir: "./apps/namadillo/dist"
-          production-deploy: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          deploy-message: "Merged PR ${{ github.event.number }} to main"
-        env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN_WALLET_PREVIEW }}
-          # https://namada-interface-dev.netlify.app/
-          NETLIFY_SITE_ID: 2380782e-9b20-477a-bc27-b4e9d05e16f3
+          SSH_PRIVATE_KEY: ${{ secrets.GH_DEPLOY_KEY }}
