@@ -3,9 +3,9 @@ on:
   workflow_dispatch
 
 env:
-  INDEXER_URL: https://indexer.public.heliax.work/internal-devnet-43.35fd77a4447
-  RPC_URL: https://proxy.public.heliax.work/internal-devnet-43.35fd77a4447
-  CHAIN_ID: internal-devnet-43.35fd77a4447
+  INDEXER_URL: https://namada-indexer.shield-crypto.com
+  RPC_URL: https://namada-mainnet-rpc.itrocket.net
+  CHAIN_ID: namada.5f5de2dd1b88cba30586420
   CI: false
 
 jobs:
