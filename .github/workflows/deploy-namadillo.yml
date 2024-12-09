@@ -4,7 +4,7 @@ on:
 
 env:
   INDEXER_URL: https://namada-indexer.shield-crypto.com
-  RPC_URL: https://namada-mainnet-rpc.itrocket.net
+  RPC_URL: https://namada-public-rpc.shield-crypto.com
   CHAIN_ID: namada.5f5de2dd1b88cba30586420
   CI: false
 
