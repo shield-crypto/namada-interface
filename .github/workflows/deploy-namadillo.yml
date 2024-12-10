@@ -5,6 +5,7 @@ on:
 env:
   INDEXER_URL: https://namada-indexer.shield-crypto.com
   RPC_URL: https://namada-public-rpc.shield-crypto.com
+  MASP_URL: https://namada-public-masp.shield-crypto.com
   CHAIN_ID: namada.5f5de2dd1b88cba30586420
   CI: false
 
@@ -37,6 +38,8 @@ jobs:
           echo "" > dist/config.toml
           echo "indexer_url = \"${{ env.INDEXER_URL }}\"" >> dist/config.toml
           echo "rpc_url = \"${{ env.RPC_URL }}\"" >> dist/config.toml
+          echo "masp_indexer_url = \"${{ env.MASP_URL }}\"" >> dist/config.toml
+           
 
       - name: Build the Chrome extension
         working-directory: ./apps/extension
