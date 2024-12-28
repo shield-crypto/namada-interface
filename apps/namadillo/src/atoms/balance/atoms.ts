@@ -1,10 +1,12 @@
+import { DefaultApi } from "@namada/indexer-client";
 import { SdkEvents } from "@namada/sdk/web";
-import { AccountType } from "@namada/types";
+import { Account, AccountType, DatedViewingKey } from "@namada/types";
 import {
   accountsAtom,
   defaultAccountAtom,
   transparentBalanceAtom,
 } from "atoms/accounts/atoms";
+import { indexerApiAtom } from "atoms/api";
 import {
   chainParametersAtom,
   chainTokensAtom,
@@ -14,6 +16,7 @@ import { shouldUpdateBalanceAtom } from "atoms/etc";
 import { tokenPricesFamily } from "atoms/prices/atoms";
 import { maspIndexerUrlAtom, rpcUrlAtom } from "atoms/settings";
 import { queryDependentFn } from "atoms/utils";
+import { isAxiosError } from "axios";
 import BigNumber from "bignumber.js";
 import { atomWithQuery } from "jotai-tanstack-query";
 import { AddressWithAsset } from "types";
@@ -22,6 +25,7 @@ import {
   mapNamadaAssetsToTokenBalances,
 } from "./functions";
 import {
+  fetchBlockHeightByTimestamp,
   fetchShieldedBalance,
   shieldedSync,
   ShieldedSyncEmitter,
@@ -32,22 +36,68 @@ export type TokenBalance = AddressWithAsset & {
   dollar?: BigNumber;
 };
 
-export const viewingKeysAtom = atomWithQuery<[string, string[]]>((get) => {
+/**
+  Gets the viewing key and its birthday timestamp if it's a generated key
+ */
+const toDatedKeypair = async (
+  api: DefaultApi,
+  { viewingKey, source, timestamp }: Account
+): Promise<DatedViewingKey> => {
+  if (typeof viewingKey === "undefined") {
+    throw new Error("Viewing key not found");
+  }
+  if (typeof timestamp === "undefined") {
+    throw new Error("Timestamp not found");
+  }
+  let height = 0;
+
+  if (source === "generated") {
+    try {
+      height = await fetchBlockHeightByTimestamp(api, timestamp);
+    } catch (e) {
+      if (isAxiosError(e) && e.status === 404) {
+        console.warn(
+          "Failed to fetch block height by timestamp, falling back to height 0",
+          e
+        );
+      }
+    }
+  }
+
+  return {
+    key: viewingKey,
+    birthday: height,
+  };
+};
+
+export const viewingKeysAtom = atomWithQuery<
+  [DatedViewingKey, DatedViewingKey[]]
+>((get) => {
   const accountsQuery = get(accountsAtom);
   const defaultAccountQuery = get(defaultAccountAtom);
+  const api = get(indexerApiAtom);
 
   return {
     queryKey: ["viewing-keys", accountsQuery.data, defaultAccountQuery.data],
     ...queryDependentFn(async () => {
-      const shieldedAccounts = accountsQuery.data?.filter(
+      const shieldedAccounts = accountsQuery.data!.filter(
         (a) => a.type === AccountType.ShieldedKeys
       );
-      const defaultShieldedAccount = shieldedAccounts?.find(
+      const defaultShieldedAccount = shieldedAccounts.find(
         (a) => a.alias === defaultAccountQuery.data?.alias
       );
-      const defaultViewingKey = defaultShieldedAccount?.viewingKey ?? "";
-      const viewingKeys =
-        shieldedAccounts?.map((a) => a.viewingKey ?? "") ?? [];
+
+      if (!defaultShieldedAccount) {
+        throw new Error("Default shielded account not found");
+      }
+
+      const defaultViewingKey = await toDatedKeypair(
+        api,
+        defaultShieldedAccount
+      );
+      const viewingKeys = await Promise.all(
+        shieldedAccounts.map(toDatedKeypair.bind(null, api))
+      );
 
       return [defaultViewingKey, viewingKeys];
     }, [accountsQuery, defaultAccountQuery]),
@@ -60,6 +110,7 @@ export const shieldedSyncAtom = atomWithQuery<ShieldedSyncEmitter | null>(
     const namTokenAddressQuery = get(nativeTokenAddressAtom);
     const rpcUrl = get(rpcUrlAtom);
     const maspIndexerUrl = get(maspIndexerUrlAtom);
+    const parametersQuery = get(chainParametersAtom);
 
     return {
       queryKey: [
@@ -72,7 +123,8 @@ export const shieldedSyncAtom = atomWithQuery<ShieldedSyncEmitter | null>(
       ...queryDependentFn(async () => {
         const viewingKeys = viewingKeysQuery.data;
         const namTokenAddress = namTokenAddressQuery.data;
-        if (!namTokenAddress || !viewingKeys) {
+        const parameters = parametersQuery.data;
+        if (!namTokenAddress || !viewingKeys || !parameters) {
           return null;
         }
         const [_, allViewingKeys] = viewingKeys;
@@ -80,9 +132,10 @@ export const shieldedSyncAtom = atomWithQuery<ShieldedSyncEmitter | null>(
           rpcUrl,
           maspIndexerUrl,
           namTokenAddress,
-          allViewingKeys
+          allViewingKeys,
+          parameters.chainId
         );
-      }, [viewingKeysQuery, namTokenAddressQuery]),
+      }, [viewingKeysQuery, namTokenAddressQuery, parametersQuery]),
     };
   }
 );
@@ -97,6 +150,7 @@ export const shieldedBalanceAtom = atomWithQuery<
   const rpcUrl = get(rpcUrlAtom);
   const maspIndexerUrl = get(maspIndexerUrlAtom);
   const shieldedSync = get(shieldedSyncAtom);
+  const chainParametersQuery = get(chainParametersAtom);
 
   return {
     refetchInterval: enablePolling ? 1000 : false,
@@ -113,7 +167,8 @@ export const shieldedBalanceAtom = atomWithQuery<
       const viewingKeys = viewingKeysQuery.data;
       const chainTokens = chainTokensQuery.data;
       const syncEmitter = shieldedSync.data;
-      if (!viewingKeys || !chainTokens || !syncEmitter) {
+      const chain = chainParametersQuery.data;
+      if (!viewingKeys || !chainTokens || !syncEmitter || !chain) {
         return [];
       }
       const [viewingKey] = viewingKeys;
@@ -124,14 +179,20 @@ export const shieldedBalanceAtom = atomWithQuery<
 
       const response = await fetchShieldedBalance(
         viewingKey,
-        chainTokens.map((t) => t.address)
+        chainTokens.map((t) => t.address),
+        chain.chainId
       );
       const shieldedBalance = response.map(([address, amount]) => ({
         address,
         minDenomAmount: BigNumber(amount),
       }));
       return shieldedBalance;
-    }, [viewingKeysQuery, chainTokensQuery, namTokenAddressQuery]),
+    }, [
+      viewingKeysQuery,
+      chainTokensQuery,
+      namTokenAddressQuery,
+      chainParametersQuery,
+    ]),
   };
 });
 
