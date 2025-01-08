@@ -8,7 +8,10 @@ import {
   TransferModule,
 } from "App/Transfer/TransferModule";
 import { allDefaultAccountsAtom } from "atoms/accounts";
-import { namadaTransparentAssetsAtom } from "atoms/balance/atoms";
+import {
+  namadaShieldedAssetsAtom,
+  namadaTransparentAssetsAtom,
+} from "atoms/balance/atoms";
 import { chainParametersAtom } from "atoms/chain/atoms";
 import { applicationFeaturesAtom, rpcUrlAtom } from "atoms/settings";
 import BigNumber from "bignumber.js";
@@ -40,7 +43,9 @@ export const NamadaTransfer: React.FC = () => {
   const defaultAccounts = useAtomValue(allDefaultAccountsAtom);
 
   const { data: availableAssetsData, isLoading: isLoadingAssets } =
-    useAtomValue(namadaTransparentAssetsAtom);
+    useAtomValue(
+      shielded ? namadaShieldedAssetsAtom : namadaTransparentAssetsAtom
+    );
 
   const { storeTransaction } = useTransactionActions();
 
@@ -116,6 +121,10 @@ export const NamadaTransfer: React.FC = () => {
       invariant(chainId, "Chain ID is undefined");
       invariant(selectedAsset, "No asset is selected");
       invariant(gasConfig, "No gas config");
+      invariant(
+        sourceAddress !== customAddress,
+        "The recipient address must differ from the sender address"
+      );
 
       const txResponse = await performTransfer({ memo });
 
